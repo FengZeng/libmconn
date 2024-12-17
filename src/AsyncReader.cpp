@@ -31,7 +31,13 @@ void AsyncReader::ThreadWork() {
             if (m_seek.load()) {
                 int64_t seekPos = m_mc->m_newPosition + m_id * m_mc->m_BufferCapacity;
                 av_log(m_avio, AV_LOG_ERROR, "---zzz---[%s] AsyncReader[%d] execute seek to %lld\n", current_time().c_str(), m_id, seekPos);
-                avio_seek(m_avio, seekPos, SEEK_SET);
+                if (avio_seek(m_avio, seekPos, SEEK_SET) < 0) {
+                    av_log(m_avio, AV_LOG_ERROR, "---zzz---[%s] AsyncReader[%d] seek failed, sleep_for: %d\n", current_time().c_str(), m_id, mtime);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(mtime));
+                    if (mtime < 3000)
+                        mtime += 1000;
+                    continue;
+                }
                 skip = false;
                 m_seek.store(false);
                 continue;
@@ -41,7 +47,7 @@ void AsyncReader::ThreadWork() {
                 if (m_close.load())
                     break;
                 if (avio_skip(m_avio, (m_mc->m_thdNum - 1) * m_mc->m_BufferCapacity) < 0) {
-                    av_log(m_avio, AV_LOG_ERROR, "---zzz---[%s] AsyncReader[%d] seek failed, sleep_for: %d\n", current_time().c_str(), m_id, mtime);
+                    av_log(m_avio, AV_LOG_ERROR, "---zzz---[%s] AsyncReader[%d] skip failed, sleep_for: %d\n", current_time().c_str(), m_id, mtime);
                     std::this_thread::sleep_for(std::chrono::milliseconds(mtime));
                     if (mtime < 3000)
                         mtime += 1000;

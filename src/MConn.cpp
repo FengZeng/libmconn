@@ -32,7 +32,7 @@ int MConn::Init(int num) {
     m_shutdown = false;
     m_useAsync = false;
     m_readSize = 0;
-    m_activeId = 1;
+    m_activeId = 0;
 
     for (int i=0; i<m_thdNum; i++) {
         m_reader[i] = new AsyncReader(i, this, true, 0);
@@ -82,7 +82,7 @@ int MConn::Read(unsigned char* buf, int size) {
     std::unique_lock<std::mutex> lk(mtx);
     int lsize = size;
     int offset = 0;
-    int splitSize = m_BufferCapacity / m_thdNum;
+    const int splitSize = 3 * m_BufferCapacity / m_thdNum;
 
     if (!m_useAsync) {
         ret = avio_read_partial(m_avio, buf, size);
@@ -100,25 +100,15 @@ int MConn::Read(unsigned char* buf, int size) {
         //av_log(m_avio, AV_LOG_WARNING, "---zzz---last read ret: %d\n", ret);
         if (ret > 0)
             m_readSize += ret;
-        int idx0 = m_readSize / splitSize;
-        //av_log(m_avio, AV_LOG_WARNING, "---zzz---0 m_readSize: %d, index0: %d\n", m_readSize, idx0);
-        int idx1 = (idx0 / 3) % m_thdNum;
-        //av_log(m_avio, AV_LOG_WARNING, "---zzz---1 m_readSize: %d, index1: %d\n", m_readSize, idx1);
-        if (idx1 > 0 && m_reader[idx1 - 1]->m_seek.load() && ret > 0) {
-            if (m_reader[idx1 - 1]->m_bufferReady.load()) {
-                m_reader[idx1 - 1]->m_bufferReady.store(false);
-                m_reader[idx1 - 1]->m_cvRead.notify_one();
-                av_log(m_avio, AV_LOG_WARNING, "\n---zzz---start Async Reader0[%d]\n", idx1 - 1);
-                av_log(m_avio, AV_LOG_WARNING, "---zzz---ret: %d m_BufferCapacity: %d, m_readSize: %d\n", ret, m_BufferCapacity, m_readSize);
-            }
+
+        if (m_readSize > ((m_activeId + 1) * splitSize)) {
+            m_reader[m_activeId]->m_bufferReady.store(false);
+            m_reader[m_activeId]->m_cvRead.notify_one();
+            av_log(m_avio, AV_LOG_WARNING, "\n---zzz---start Async Reader0[%d]\n", m_activeId);
+            av_log(m_avio, AV_LOG_WARNING, "---zzz---ret: %d m_BufferCapacity: %d, m_readSize: %d\n", ret, m_BufferCapacity, m_readSize);
+            m_activeId++;
         }
 
-        if (m_notifySeek && m_readSize > 1024 * 512) {
-            m_notifySeek = false;
-            for (int i=0; i<m_thdNum; i++) {
-                m_reader[i]->m_seek.store(true);
-            }
-        }
         return (ret <= 0) ? -1 : ret;
     } else {
         //av_log(m_avio, AV_LOG_WARNING, "---zzz--- reading from async buffer[%d]\n", m_curIdx);
@@ -166,12 +156,13 @@ int MConn::Seek(int64_t pos) {
     int ret = 0;
     m_newPosition = pos + 3 * m_BufferCapacity;
     for (int i=0; i<m_thdNum; i++) {
+        m_reader[i]->m_seek.store(true);
         m_reader[i]->m_bufferReady.store(true);
     }
     m_useAsync = false;
     m_notifySeek = true;
     m_readSize = 0;
-    m_activeId = 1;
+    m_activeId = 0;
 
     if (avio_seek(m_avio, pos, SEEK_SET) < 0)
         ret = 0;
