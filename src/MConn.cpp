@@ -4,6 +4,8 @@
 #include "MConn.h"
 #include "libavformat/avio.h"
 
+#define READ_NUM 2
+
 static int interrupt_cb(void *opaque)
 {
     AsyncReader *reader = (AsyncReader*)opaque;
@@ -43,8 +45,7 @@ int MConn::Init(int num) {
 
 int MConn::Open(const char* url) {
     m_curIdx = 0;
-    m_BufferCapacity = 0;
-    m_notifySeek = false;
+    m_bufferCapacity = 0;
 
     for (int i=0; i<m_thdNum; i++) {
         AVIOInterruptCB cb = {
@@ -55,23 +56,23 @@ int MConn::Open(const char* url) {
         if (i == 0) {
             int64_t videoSize = Size();
             if (videoSize < 2147483648)
-                m_BufferCapacity = 6 * 1024 * 1024;
+                m_bufferCapacity = 6 * 1024 * 1024;
             else if (videoSize < 4294967296)
-                m_BufferCapacity = 9 * 1024 * 1024;
+                m_bufferCapacity = 9 * 1024 * 1024;
             else if (videoSize < 6442450944)
-                m_BufferCapacity = 13 * 1024 * 1024;
+                m_bufferCapacity = 13 * 1024 * 1024;
             else if (videoSize < 9663676416)
-                m_BufferCapacity = 18 * 1024 * 1024;
+                m_bufferCapacity = 18 * 1024 * 1024;
             else
-                m_BufferCapacity = 20 * 1024 * 1024;
+                m_bufferCapacity = 20 * 1024 * 1024;
         }
-        m_reader[i]->m_buffer = (unsigned char*)malloc(m_BufferCapacity * sizeof(unsigned char));
+        m_reader[i]->m_buffer = (unsigned char*)malloc(m_bufferCapacity * sizeof(unsigned char));
     }
     m_avio = m_reader[m_thdNum - 1]->m_avio;
     return 0;
 }
 
-int MConn::Notify() {
+int MConn::Active() {
     m_cvUser.notify_one();
     return 0;
 }
@@ -82,19 +83,16 @@ int MConn::Read(unsigned char* buf, int size) {
     std::unique_lock<std::mutex> lk(mtx);
     int lsize = size;
     int offset = 0;
-    const int splitSize = 3 * m_BufferCapacity / m_thdNum;
+    const int splitSize = READ_NUM * m_bufferCapacity / m_thdNum;
 
     if (!m_useAsync) {
         ret = avio_read_partial(m_avio, buf, size);
-        if (ret > 3 * m_BufferCapacity - m_readSize) {
+        if (ret > READ_NUM * m_bufferCapacity - m_readSize) {
             m_curIdx = 0;
-            m_reader[m_curIdx]->m_bufferUsed = ret - (3 * m_BufferCapacity - m_readSize);
+            m_reader[m_curIdx]->m_bufferUsed = ret - (READ_NUM * m_bufferCapacity - m_readSize);
             m_useAsync = true;
-            av_log(m_avio, AV_LOG_WARNING, "---zzz---last read size: %d, async reader will be used, m_BufferCapacity: %d, m_readSize: %d\n", size, m_BufferCapacity, m_readSize);
-            m_reader[m_thdNum - 1]->m_bufferReady.store(false);
-            m_reader[m_thdNum - 1]->m_cvRead.notify_one();
-            av_log(m_avio, AV_LOG_WARNING, "\n---zzz---start Async Reader0[%d]\n", m_thdNum - 1);
-            av_log(m_avio, AV_LOG_WARNING, "---zzz---ret: %d m_BufferCapacity: %d, m_readSize: %d\n", ret, m_BufferCapacity, m_readSize);
+            av_log(m_avio, AV_LOG_WARNING, "---zzz---last read size: %d, async reader will be used, m_bufferCapacity: %d, m_readSize: %d\n", size, m_bufferCapacity, m_readSize);
+            m_reader[m_thdNum - 1]->Active();
             return ret;
         }
         //av_log(m_avio, AV_LOG_WARNING, "---zzz---last read ret: %d\n", ret);
@@ -102,10 +100,7 @@ int MConn::Read(unsigned char* buf, int size) {
             m_readSize += ret;
 
         if (m_readSize > ((m_activeId + 1) * splitSize)) {
-            m_reader[m_activeId]->m_bufferReady.store(false);
-            m_reader[m_activeId]->m_cvRead.notify_one();
-            av_log(m_avio, AV_LOG_WARNING, "\n---zzz---start Async Reader0[%d]\n", m_activeId);
-            av_log(m_avio, AV_LOG_WARNING, "---zzz---ret: %d m_BufferCapacity: %d, m_readSize: %d\n", ret, m_BufferCapacity, m_readSize);
+            m_reader[m_activeId]->Active();
             m_activeId++;
         }
 
@@ -154,13 +149,12 @@ int MConn::Read(unsigned char* buf, int size) {
 
 int MConn::Seek(int64_t pos) {
     int ret = 0;
-    m_newPosition = pos + 3 * m_BufferCapacity;
+    m_newPosition = pos + READ_NUM * m_bufferCapacity;
     for (int i=0; i<m_thdNum; i++) {
         m_reader[i]->m_seek.store(true);
         m_reader[i]->m_bufferReady.store(true);
     }
     m_useAsync = false;
-    m_notifySeek = true;
     m_readSize = 0;
     m_activeId = 0;
 

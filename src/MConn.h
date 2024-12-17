@@ -29,7 +29,7 @@ public:
     MConn();
     int Init(int num);
     int Open(const char* url);
-    int Notify();
+    int Active();
     int Read(unsigned char* buf, int size);
     int Seek(int64_t pos);
     int64_t Size();
@@ -37,14 +37,13 @@ public:
 
 public:
     int m_thdNum;
-    int m_BufferCapacity {0};
+    int m_bufferCapacity {0};
     int64_t m_newPosition {0};
 
 private:
     std::atomic<bool> m_shutdown {false};
     std::condition_variable m_cvUser;
     bool m_useAsync;
-    bool m_notifySeek;
     int m_curIdx;
     int m_readSize;
 

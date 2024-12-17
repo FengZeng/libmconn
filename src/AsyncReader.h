@@ -14,6 +14,8 @@ class AsyncReader {
 public:
     AsyncReader(int id, MConn* mc, bool ready, int size);
     ~AsyncReader();
+    void Active();
+private:
     void ThreadWork();
 public:
     std::atomic<bool> m_seek {false};
