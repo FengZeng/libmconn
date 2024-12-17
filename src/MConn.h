@@ -48,6 +48,8 @@ private:
     int m_curIdx;
     int m_readSize;
 
+    int m_activeId;
+
     AVIOContext* m_avio;
     AsyncReader* m_reader[MAX_THREAD];
 };

@@ -32,6 +32,7 @@ int MConn::Init(int num) {
     m_shutdown = false;
     m_useAsync = false;
     m_readSize = 0;
+    m_activeId = 1;
 
     for (int i=0; i<m_thdNum; i++) {
         m_reader[i] = new AsyncReader(i, this, true, 0);
@@ -170,12 +171,13 @@ int MConn::Seek(int64_t pos) {
     m_useAsync = false;
     m_notifySeek = true;
     m_readSize = 0;
+    m_activeId = 1;
 
     if (avio_seek(m_avio, pos, SEEK_SET) < 0)
         ret = 0;
     else
         ret = 1;
-    av_log(m_avio, AV_LOG_WARNING, "---zzz---seek to %lld ret: %d, m_newPosition: %lld\n", pos, ret, m_newPosition);
+    av_log(m_avio, AV_LOG_WARNING, "---zzz---[%s] seek to %lld ret: %d, m_newPosition: %lld\n", current_time().c_str(), pos, ret, m_newPosition);
     return ret;
 }
 
@@ -187,8 +189,6 @@ int MConn::Close() {
     m_shutdown = true;
     for (int i=0; i<m_thdNum; i++) {
         av_log(m_reader[i]->m_avio, AV_LOG_WARNING, "---zzz---Close reader[%d] \n", i);
-        if (m_reader[i]->m_avio)
-            avio_close(m_reader[i]->m_avio);
         delete m_reader[i];
     }
     return 0;
