@@ -67,7 +67,7 @@ int MConn::Open(const char* url) {
         }
         m_reader[i]->m_buffer = (unsigned char*)malloc(m_BufferCapacity * sizeof(unsigned char));
     }
-    m_avio = m_reader[7]->m_avio;
+    m_avio = m_reader[m_thdNum - 1]->m_avio;
     return 0;
 }
 
@@ -91,9 +91,9 @@ int MConn::Read(unsigned char* buf, int size) {
             m_reader[m_curIdx]->m_bufferUsed = ret - (3 * m_BufferCapacity - m_readSize);
             m_useAsync = true;
             av_log(m_avio, AV_LOG_WARNING, "---zzz---last read size: %d, async reader will be used, m_BufferCapacity: %d, m_readSize: %d\n", size, m_BufferCapacity, m_readSize);
-            m_reader[7]->m_bufferReady.store(false);
-            m_reader[7]->m_cvRead.notify_one();
-            av_log(m_avio, AV_LOG_WARNING, "\n---zzz---start Async Reader0[%d]\n", 7);
+            m_reader[m_thdNum - 1]->m_bufferReady.store(false);
+            m_reader[m_thdNum - 1]->m_cvRead.notify_one();
+            av_log(m_avio, AV_LOG_WARNING, "\n---zzz---start Async Reader0[%d]\n", m_thdNum - 1);
             av_log(m_avio, AV_LOG_WARNING, "---zzz---ret: %d m_BufferCapacity: %d, m_readSize: %d\n", ret, m_BufferCapacity, m_readSize);
             return ret;
         }
@@ -104,8 +104,8 @@ int MConn::Read(unsigned char* buf, int size) {
         //av_log(m_avio, AV_LOG_WARNING, "---zzz---0 m_readSize: %d, index0: %d\n", m_readSize, idx0);
         int idx1 = (idx0 / 3) % m_thdNum;
         //av_log(m_avio, AV_LOG_WARNING, "---zzz---1 m_readSize: %d, index1: %d\n", m_readSize, idx1);
-        if (m_reader[idx1]->m_seek.load() && ret > 0) {
-            if (idx1 > 0 && m_reader[idx1 - 1]->m_bufferReady.load()) {
+        if (idx1 > 0 && m_reader[idx1 - 1]->m_seek.load() && ret > 0) {
+            if (m_reader[idx1 - 1]->m_bufferReady.load()) {
                 m_reader[idx1 - 1]->m_bufferReady.store(false);
                 m_reader[idx1 - 1]->m_cvRead.notify_one();
                 av_log(m_avio, AV_LOG_WARNING, "\n---zzz---start Async Reader0[%d]\n", idx1 - 1);
