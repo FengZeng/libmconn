@@ -29,7 +29,7 @@ void AsyncReader::ThreadWork() {
         //av_log(NULL, AV_LOG_ERROR, "---zzz---[%s] AsyncReader[%d] bufferReady %d\n", current_time().c_str(), m_id, m_reader[m_id]->m_bufferReady.load());
         if (!m_bufferReady.load()) {
             if (m_seek.load()) {
-                int64_t seekPos = m_mc->m_newPosition + (m_id == 0 ? m_mc->m_thdNum : m_id) * m_mc->m_BufferCapacity;
+                int64_t seekPos = m_mc->m_newPosition + m_id * m_mc->m_BufferCapacity;
                 av_log(m_avio, AV_LOG_ERROR, "---zzz---[%s] AsyncReader[%d] execute seek to %lld\n", current_time().c_str(), m_id, seekPos);
                 avio_seek(m_avio, seekPos, SEEK_SET);
                 skip = false;
