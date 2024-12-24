@@ -21,6 +21,8 @@ dependencies = [libavcodec,
                 libswscale]
 
 subdir('src')
-subdir('test')
+if host_machine.system() != 'windows'
+  subdir('test')
+endif
 
 install_headers('include/libmconn.h')

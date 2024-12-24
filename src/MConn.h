@@ -20,6 +20,7 @@ void mconn_wrap_close(void* mc);
 #ifdef __cplusplus
 
 #include "AsyncReader.h"
+#include <string>
 #define MAX_THREAD 16
 
 std::string current_time();

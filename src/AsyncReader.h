@@ -2,7 +2,8 @@
 #define ASYNC_REAADER
 #include <chrono>
 #include <thread>
-
+#include <atomic>
+#include <condition_variable>
 
 extern "C" {
 #include "libavformat/avformat.h"
